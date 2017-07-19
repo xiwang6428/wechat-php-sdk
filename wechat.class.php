@@ -2,8 +2,8 @@
 /**
  *	微信公众平台PHP-SDK, 官方API部分
  *  @author  dodge <dodgepudding@gmail.com>
- *  @link https://github.com/dodgepudding/wechat-php-sdk
- *  @version 1.2
+ *  @link https://github.com/xiwang6428/wechat-php-sdk
+ *  @version 1.3
  *  usage:
  *   $options = array(
  *			'token'=>'tokenaccesskey', //填写你设定的key
@@ -82,6 +82,7 @@ class Wechat
 	const MENU_DELETE_URL = '/menu/delete?';
 	const MENU_ADDCONDITIONAL_URL = '/menu/addconditional?';
 	const MENU_DELCONDITIONAL_URL = '/menu/delconditional?';
+	const MENU_GET_SELF_MENU_INFO = '/get_current_selfmenu_info?';
 	const MENU_TRYMATCH_URL = '/menu/trymatch?';
 	const GET_TICKET_URL = '/ticket/getticket?';
 	const CALLBACKSERVER_GET_URL = '/getcallbackip?';
@@ -94,12 +95,14 @@ class Wechat
 	const USER_INFO_URL='/user/info?';
 	const USERS_INFO_URL='/user/info/batchget?';
 	const USER_UPDATEREMARK_URL='/user/info/updateremark?';
-	const GROUP_GET_URL='/groups/get?';
-	const USER_GROUP_URL='/groups/getid?';
-	const GROUP_CREATE_URL='/groups/create?';
-	const GROUP_UPDATE_URL='/groups/update?';
-	const GROUP_MEMBER_UPDATE_URL='/groups/members/update?';
-	const GROUP_MEMBER_BATCHUPDATE_URL='/groups/members/batchupdate?';
+	const GROUP_GET_URL='/tags/get?';
+	const USER_GROUP_URL='/tags/getidlist?';
+	const GROUP_USERS_URL='/user/tag/get?';
+	const GROUP_CREATE_URL='/tags/create?';
+	const GROUP_UPDATE_URL='/tags/update?';
+	const GROUP_DELETE_URL='/tags/delete?';
+	const GROUP_MEMBER_BATCHUPDATE_URL='/tags/members/batchtagging?';
+	const GROUP_MEMBER_BATCHCANCEL_URL='/tags/members/batchuntagging?';
 	const CUSTOM_SEND_URL='/message/custom/send?';
 	const MEDIA_UPLOADNEWS_URL = '/media/uploadnews?';
 	const MASS_SEND_URL = '/message/mass/send?';
@@ -1573,7 +1576,19 @@ class Wechat
      * 6、pic_photo_or_album：弹出拍照或者相册发图
      * 7、pic_weixin：弹出微信相册发图器
      * 8、location_select：弹出地理位置选择器
-	 */
+     * 9、media_id：下发消息（除文本消息）给用户点击media_id类型按钮后，微信服务器会将开发者填写的永久素材id对应的素材下发给用户。
+     * 10、view_limited：用户点击view_limited类型按钮后，微信客户端将打开开发者在按钮中填写的永久素材id对应的图文消息URL。
+     * 3到8的所有事件，仅支持微信iPhone5.4.1以上版本，和Android5.4以上版本的微信用户，旧版本微信用户点击后将没有回应，
+     * 开发者也不能正常接收到事件推送。9和10，是专门给第三方平台旗下未微信认证（具体而言，是资质认证未通过）的订阅号准备的事件类型，
+     * 它们是没有事件推送的，能力相对受限，其他类型的公众号不必使用。
+     * 
+     * 注意：
+     * 1、自定义菜单最多包括3个一级菜单，每个一级菜单最多包含5个二级菜单。
+     * 2、一级菜单最多4个汉字，二级菜单最多7个汉字，多出来的部分将会以“...”代替。
+     * 3、创建自定义菜单后，菜单的刷新策略是，在用户进入公众号会话页或公众号profile页时，
+     * 如果发现上一次拉取菜单的请求在5分钟以前，就会拉取一下菜单，如果菜单有更新，就会刷新客户端的菜单。
+     * 测试时可以尝试取消关注公众账号后再次关注，则可以看到创建后的效果。	
+     *  */
 	public function createMenu($data){
 		if (!$this->access_token && !$this->checkAuth()) return false;
 		$result = $this->http_post(self::API_URL_PREFIX.self::MENU_CREATE_URL.'access_token='.$this->access_token,self::json_encode($data));
@@ -1696,6 +1711,29 @@ class Wechat
 		return false;
 	}
 
+	/**
+	 * 获取自定义菜单配置接口(认证/未认证的服务号/订阅号，以及接口测试号均可用)
+	 * 本接口将会提供公众号当前使用的自定义菜单的配置，如果公众号是通过API调用设置的菜单，则返回菜单的开发配置，
+	 * 而如果公众号是在公众平台官网通过网站功能发布菜单，则本接口返回运营者设置的菜单配置。
+	 *
+	 * @return array('is_menu_open'1,'selfmenu_info'=>array(....s))
+	 */
+	public function getCurrentSelfMenuInfo(){
+		if (!$this->access_token && !$this->checkAuth()) return false;
+		$result = $this->http_post(self::API_URL_PREFIX.self::MENU_GET_SELF_MENU_INFO.'access_token='.$this->access_token);
+		if ($result)
+		{
+			$json = json_decode($result,true);
+			if (!$json || !empty($json['errcode'])) {
+				$this->errCode = $json['errcode'];
+				$this->errMsg = $json['errmsg'];
+				return false;
+			}
+			return $json;
+		}
+		return false;
+	}
+	
 	/**
 	 * 上传临时素材，有效期为3天(认证后的订阅号可用)
 	 * 注意：上传大文件时可能需要先调用 set_time_limit(0) 避免超时
@@ -2379,7 +2417,7 @@ class Wechat
 	}
 
 	/**
-	 * 获取用户分组列表
+	 * 获取获取公众号已创建的标签
 	 * @return boolean|array
 	 */
 	public function getGroup(){
@@ -2399,7 +2437,7 @@ class Wechat
 	}
 
 	/**
-	 * 获取用户所在分组
+	 * 获取用户身上的标签列表
 	 * @param string $openid
 	 * @return boolean|int 成功则返回用户分组id
 	 */
@@ -2423,14 +2461,40 @@ class Wechat
 	}
 
 	/**
-	 * 新增自定分组
-	 * @param string $name 分组名称
+	 * 获取标签下粉丝列表
+	 * @param int $groupid 标签ID
+	 * @param string $next_openid 第一个拉取的openid，不填默认从头开始拉取
+	 * @return boolean|int 成功则返回用户分组id
+	 */
+	public function getGroupUsers($groupid, $next_openid=''){
+		if (!$this->access_token && !$this->checkAuth()) return false;
+		$data = array(
+				'tagid'=>$groupid,
+				'next_openid'=>$next_openid
+		);
+		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_USERS_URL.'access_token='.$this->access_token,self::json_encode($data));
+		if ($result)
+		{
+			$json = json_decode($result,true);
+			if (!$json || !empty($json['errcode'])) {
+				$this->errCode = $json['errcode'];
+				$this->errMsg = $json['errmsg'];
+				return false;
+			} else
+				if (isset($json['groupid'])) return $json['groupid'];
+		}
+		return false;
+	}
+
+	/**
+	 * 新增自定标签（一个公众号，最多可以创建100个标签）
+	 * @param string $name 标签名称（30个字符以内）
 	 * @return boolean|array
 	 */
 	public function createGroup($name){
 		if (!$this->access_token && !$this->checkAuth()) return false;
 		$data = array(
-				'group'=>array('name'=>$name)
+				'tag'=>array('name'=>$name)
 		);
 		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_CREATE_URL.'access_token='.$this->access_token,self::json_encode($data));
 		if ($result)
@@ -2447,15 +2511,15 @@ class Wechat
 	}
 
 	/**
-	 * 更改分组名称
-	 * @param int $groupid 分组id
-	 * @param string $name 分组名称
+	 * 更改标签名称
+	 * @param int $groupid 标签id
+	 * @param string $name 标签名称
 	 * @return boolean|array
 	 */
 	public function updateGroup($groupid,$name){
 		if (!$this->access_token && !$this->checkAuth()) return false;
 		$data = array(
-				'group'=>array('id'=>$groupid,'name'=>$name)
+				'tag'=>array('id'=>$groupid,'name'=>$name)
 		);
 		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_UPDATE_URL.'access_token='.$this->access_token,self::json_encode($data));
 		if ($result)
@@ -2472,11 +2536,35 @@ class Wechat
 	}
 
 	/**
+	 * 删除标签（请注意，当某个标签下的粉丝超过10w时，后台不可直接删除标签。）
+	 * @param int $groupid 标签id
+	 * @return boolean|array
+	 */
+	public function deleteGroup($groupid){
+		if (!$this->access_token && !$this->checkAuth()) return false;
+		$data = array(
+				'tag'=>array('id'=>$groupid)
+		);
+		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_DELETE_URL.'access_token='.$this->access_token,self::json_encode($data));
+		if ($result)
+		{
+			$json = json_decode($result,true);
+			if (!$json || !empty($json['errcode'])) {
+				$this->errCode = $json['errcode'];
+				$this->errMsg = $json['errmsg'];
+				return false;
+			}
+			return $json;
+		}
+		return false;
+	}
+	
+	/**
 	 * 移动用户分组
 	 * @param int $groupid 分组id
 	 * @param string $openid 用户openid
 	 * @return boolean|array
-	 */
+	 
 	public function updateGroupMembers($groupid,$openid){
 		if (!$this->access_token && !$this->checkAuth()) return false;
 		$data = array(
@@ -2495,11 +2583,11 @@ class Wechat
 			return $json;
 		}
 		return false;
-	}
+	}*/
 
 	/**
-	 * 批量移动用户分组
-	 * @param int $groupid 分组id
+	 * 批量为用户打标签
+	 * @param int $groupid 标签id
 	 * @param string $openid_list 用户openid数组,一次不能超过50个
 	 * @return boolean|array
 	 */
@@ -2507,7 +2595,7 @@ class Wechat
 		if (!$this->access_token && !$this->checkAuth()) return false;
 		$data = array(
 				'openid_list'=>$openid_list,
-				'to_groupid'=>$groupid
+				'tagid'=>$groupid
 		);
 		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_MEMBER_BATCHUPDATE_URL.'access_token='.$this->access_token,self::json_encode($data));
 		if ($result)
@@ -2523,6 +2611,32 @@ class Wechat
 		return false;
 	}
 
+	/**
+	 * 批量为用户取消标签
+	 * @param int $groupid 标签id
+	 * @param string $openid_list 用户openid数组,一次不能超过50个
+	 * @return boolean|array
+	 */
+	public function batchCancelGroupMembers($groupid,$openid_list){
+		if (!$this->access_token && !$this->checkAuth()) return false;
+		$data = array(
+				'openid_list'=>$openid_list,
+				'tagid'=>$groupid
+		);
+		$result = $this->http_post(self::API_URL_PREFIX.self::GROUP_MEMBER_BATCHCANCEL_URL.'access_token='.$this->access_token,self::json_encode($data));
+		if ($result)
+		{
+			$json = json_decode($result,true);
+			if (!$json || !empty($json['errcode'])) {
+				$this->errCode = $json['errcode'];
+				$this->errMsg = $json['errmsg'];
+				return false;
+			}
+			return $json;
+		}
+		return false;
+	}
+	
 	/**
 	 * 发送客服消息
 	 * @param array $data 消息结构{"touser":"OPENID","msgtype":"news","news":{...}}
